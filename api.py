@@ -1,96 +1,31 @@
-from flask import Flask, jsonify, request
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+db = SQLAlchemy()
+bcrypt = Bcrypt()
 
-db = SQLAlchemy(app)
-bcrypt = Bcrypt(app)
+def create_app():
+    app = Flask(__name__)
 
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
+    app.config['SECRET_KEY'] = '171869704e339bc29182a859942581e8'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database/users.db'
 
-    def __repr__(self):
-        return f"<User {self.username}>"
-    
-with app.app_context():
-    db.create_all()
+    db.init_app(app)
+    bcrypt.init_app(app)
 
-@app.route('/register', methods=['POST'])
-def register():
-    data = request.get_json()
+    try:
+        from routes.auth import auth_bp
+        app.register_blueprint(auth_bp)
+    except ImportError:
+        pass
 
-    username = data.get('username')
-    password = data.get('password')
+    with app.app_context():
+        db.create_all()
 
-    if not username or not password:
-        return jsonify({
-            "success": False,
-            "message": "Username and password are required."
-        }), 400
+    return app
 
-    existing_user = User.query.filter_by(username=username).first()
+app = create_app()
 
-    if existing_user:
-        return jsonify({
-            "success": False,
-            "message": "Username already exists."
-        }), 409
-    
-    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-
-    new_user = User(
-        username=username,
-        password=hashed_password
-    )
-
-    db.session.add(new_user)
-    db.session.commit()
-
-    return jsonify({
-        "success": True,
-        "message": "User registered successfully."
-    }), 201
-
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-
-    username = data.get('username')
-    password = data.get('password')
-
-    user = User.query.filter_by(username=username).first()
-
-    if user and bcrypt.check_password_hash(user.password, password):
-        return jsonify({
-            "success": True,
-            "message": "login successful.",
-                "user": {
-                "id": user.id,
-                "username": user.username
-            }
-        })
-    
-    return jsonify({
-        "success": False,
-        "message": "Invalid username or password."
-    }), 401
-
-@app.route('/users', methods=['GET'])
-def get_users():
-    users = User.query.all()
-
-    return jsonify([
-        {
-            "id": user.id,
-            "username": user.username
-        }
-        for user in users
-    ])
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
